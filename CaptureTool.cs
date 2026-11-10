@@ -55,6 +55,15 @@ class CaptureForm : Form
     [DllImport("user32.dll")] static extern bool UnregisterHotKey(IntPtr hWnd, int id);
     [DllImport("user32.dll")] static extern bool ReleaseCapture();
     [DllImport("user32.dll")] static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr w, IntPtr l);
+    [DllImport("user32.dll")] static extern bool OpenClipboard(IntPtr hWnd);
+    [DllImport("user32.dll")] static extern bool EmptyClipboard();
+    [DllImport("user32.dll")] static extern bool CloseClipboard();
+    [DllImport("user32.dll")] static extern IntPtr SetClipboardData(uint fmt, IntPtr hMem);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern uint RegisterClipboardFormat(string name);
+    [DllImport("kernel32.dll")] static extern IntPtr GlobalAlloc(uint flags, UIntPtr bytes);
+    [DllImport("kernel32.dll")] static extern IntPtr GlobalLock(IntPtr h);
+    [DllImport("kernel32.dll")] static extern bool GlobalUnlock(IntPtr h);
+    [DllImport("kernel32.dll")] static extern IntPtr GlobalFree(IntPtr h);
 
     // ---------- 상태 ----------
     int capW = 800, capH = 600;
@@ -407,7 +416,8 @@ class CaptureForm : Form
     {
         if (keyData == (Keys.Control | Keys.C) || keyData == Keys.F9)
         {
-            DoCapture();
+            // 키 입력 처리가 끝난 뒤 캡처 (키 메시지 처리 중 클립보드 접근 충돌 방지)
+            BeginInvoke((MethodInvoker)delegate { DoCapture(); });
             return true;
         }
         return base.ProcessCmdKey(ref msg, keyData);
@@ -440,7 +450,7 @@ class CaptureForm : Form
                 bmp.Save(Path.Combine(folder, name), ImageFormat.Png);
 
                 string clip = "클립보드 복사됨";
-                try { Clipboard.SetImage(bmp); }
+                try { CopyToClipboard(bmp); }
                 catch (Exception ex) { clip = "클립보드 실패: " + ex.Message; }
                 status.Text = "저장: " + name + "  (" + clip + ")";
             }
@@ -452,6 +462,47 @@ class CaptureForm : Form
             MessageBox.Show(this, ex.Message, "캡처 실패", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         finally { busy = false; }
+    }
+
+    // ---------- 클립보드 (Win32 직접: CF_DIB + PNG) ----------
+    static IntPtr ToHGlobal(byte[] data, int offset)
+    {
+        int n = data.Length - offset;
+        IntPtr h = GlobalAlloc(0x0002, (UIntPtr)(uint)n);          // GMEM_MOVEABLE
+        if (h == IntPtr.Zero) throw new Exception("메모리 할당 실패");
+        IntPtr p = GlobalLock(h);
+        Marshal.Copy(data, offset, p, n);
+        GlobalUnlock(h);
+        return h;
+    }
+
+    void CopyToClipboard(Bitmap bmp)
+    {
+        byte[] bmpBytes, pngBytes;
+        using (MemoryStream ms = new MemoryStream()) { bmp.Save(ms, ImageFormat.Bmp); bmpBytes = ms.ToArray(); }
+        using (MemoryStream ms = new MemoryStream()) { bmp.Save(ms, ImageFormat.Png); pngBytes = ms.ToArray(); }
+
+        bool opened = false;
+        for (int i = 0; i < 25 && !opened; i++)                     // 다른 프로그램이 점유 중이면 재시도
+        {
+            opened = OpenClipboard(Handle);
+            if (!opened) System.Threading.Thread.Sleep(40);
+        }
+        if (!opened) throw new Exception("클립보드를 열 수 없습니다 (다른 프로그램이 사용 중)");
+        try
+        {
+            EmptyClipboard();
+            IntPtr hDib = ToHGlobal(bmpBytes, 14);                   // BMP 파일 헤더 제외 → DIB
+            if (SetClipboardData(8, hDib) == IntPtr.Zero)            // CF_DIB
+            {
+                GlobalFree(hDib);
+                throw new Exception("클립보드 쓰기 실패");
+            }
+            uint cfPng = RegisterClipboardFormat("PNG");             // Office 등은 PNG 우선 사용
+            IntPtr hPng = ToHGlobal(pngBytes, 0);
+            if (SetClipboardData(cfPng, hPng) == IntPtr.Zero) GlobalFree(hPng);
+        }
+        finally { CloseClipboard(); }
     }
 
     // ---------- 폴더 ----------

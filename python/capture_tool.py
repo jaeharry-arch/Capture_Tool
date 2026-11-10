@@ -187,6 +187,8 @@ class CaptureApp:
                                    state="readonly", font=NUM_FONT)
         self.preset.pack(side="left")
         self.preset.bind("<<ComboboxSelected>>", self.on_preset)
+        self.preset.bind("<Control-c>", self._ctrl_c)
+        self.preset.bind("<Control-C>", self._ctrl_c)
 
         self.w_var = tk.StringVar()
         self.h_var = tk.StringVar()
@@ -200,6 +202,9 @@ class CaptureApp:
             sp.bind("<Return>", lambda e: self.apply_inputs())
             sp.bind("<KP_Enter>", lambda e: self.apply_inputs())
             sp.bind("<Button-1>", lambda e: self.root.focus_force())
+            # 입력칸의 기본 텍스트 복사보다 캡처를 먼저 처리
+            sp.bind("<Control-c>", self._ctrl_c)
+            sp.bind("<Control-C>", self._ctrl_c)
 
         self.mk_btn(row1, "적용", self.apply_inputs).pack(side="left", padx=(6, 0))
         self.mk_btn(row1, "● 캡처 (F9)", self.capture, bg="#c62828",
@@ -285,7 +290,8 @@ class CaptureApp:
 
     # ---------- 드래그 ----------
     def _ctrl_c(self, _=None):
-        self.capture()
+        # 키 처리가 끝난 뒤 캡처 (Tk 기본 복사 동작과 클립보드 충돌 방지)
+        self.root.after(30, self.capture)
         return "break"
 
     def drag_start(self, e):
