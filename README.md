@@ -14,3 +14,10 @@
   - 클립보드 복사 → Ctrl+V로 바로 붙여넣기
 - **설정 기억**: 크기·위치·폴더 → `%APPDATA%\CaptureTool\settings.ini`
 - DPI 배율(125%, 150% 등)과 무관하게 실제 픽셀 기준으로 캡처
+
+## Python 버전 (참고용)
+`python/capture_tool.py` — 동일 기능의 tkinter 버전 (Python + Pillow 필요)
+```
+pip install pillow
+python python/capture_tool.py
+```
