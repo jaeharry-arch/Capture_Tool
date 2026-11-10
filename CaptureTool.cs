@@ -12,11 +12,17 @@ using System.Windows.Forms;
 static class Program
 {
     [DllImport("user32.dll")] static extern bool SetProcessDPIAware();
+    [DllImport("user32.dll")] static extern bool SetProcessDpiAwarenessContext(IntPtr v);
+    [DllImport("shcore.dll")] static extern int SetProcessDpiAwareness(int v);
 
     [STAThread]
     static void Main()
     {
-        try { SetProcessDPIAware(); } catch { }   // 실제 픽셀 = 이미지 픽셀
+        // 모니터별 DPI 인식 (배율이 다른 모니터에서도 화면 좌표 = 실제 픽셀 → 캡처 위치 어긋남 방지)
+        bool ok = false;
+        try { ok = SetProcessDpiAwarenessContext(new IntPtr(-4)); } catch { }      // Per-Monitor V2 (Win10 1703+)
+        if (!ok) try { ok = SetProcessDpiAwareness(2) == 0; } catch { }            // Per-Monitor (Win8.1+)
+        if (!ok) try { SetProcessDPIAware(); } catch { }                            // System
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
         Application.Run(new CaptureForm());
@@ -27,6 +33,7 @@ class CaptureForm : Form
 {
     // ---------- 설정 ----------
     const int B = 3;            // 테두리 두께 (캡처 영역 바깥)
+    const int GAP = 1;          // 빨간 테두리와 캡처 영역 사이 투명 여유 (테두리 혼입 방지)
     const int MINS = 16;
     const int MAXS = 10000;
     const int HOTKEY_ID = 1;
@@ -242,7 +249,7 @@ class CaptureForm : Form
         int winW = btnMin.Width * 3;
         tbHeight = S(4) + Math.Max(r1.Height, btnMin.Height) + S(2) + status.Height + S(4);
         int tbW = S(4) + r1.Width + S(12) + winW;
-        int fw = capW + 2 * B + 2 * GB, fh = capH + 2 * B + 2 * GB;
+        int fw = capW + 2 * (B + GAP + GB), fh = capH + 2 * (B + GAP + GB);
         int tbWidth = Math.Max(tbW, fw);
 
         tb.Bounds = new Rectangle(0, 0, tbWidth, tbHeight);
@@ -253,7 +260,7 @@ class CaptureForm : Form
                                       tbWidth - S(12), status.Height);
 
         frameRect = new Rectangle(0, tbHeight, fw, fh);
-        regionRect = new Rectangle(GB + B, tbHeight + GB + B, capW, capH);
+        regionRect = new Rectangle(GB + B + GAP, tbHeight + GB + B + GAP, capW, capH);
 
         Bounds = new Rectangle(loc ?? Location, new Size(tbWidth, tbHeight + fh));
         Invalidate();
@@ -268,9 +275,9 @@ class CaptureForm : Form
         using (Pen ln = new Pen(FRAME_LINE))
             g.DrawRectangle(ln, frameRect.X, frameRect.Y, frameRect.Width - 1, frameRect.Height - 1);
         using (SolidBrush br = new SolidBrush(borderColor))
-            g.FillRectangle(br, Rectangle.Inflate(regionRect, B, B));
+            g.FillRectangle(br, Rectangle.Inflate(regionRect, B + GAP, B + GAP));
         using (SolidBrush k = new SolidBrush(KEY))
-            g.FillRectangle(k, regionRect);
+            g.FillRectangle(k, Rectangle.Inflate(regionRect, GAP, GAP));
 
         // 모서리 표시 (오른쪽 아래)
         if (!maxed)
@@ -286,7 +293,7 @@ class CaptureForm : Form
     // 반환: 0=없음, -1=위쪽 띠(창 이동), 그 외 1|2|4 조합
     int HitZone(Point pt)
     {
-        if (!frameRect.Contains(pt) || Rectangle.Inflate(regionRect, B, B).Contains(pt)) return 0;
+        if (!frameRect.Contains(pt) || Rectangle.Inflate(regionRect, B + GAP, B + GAP).Contains(pt)) return 0;
         int c = GB * 3;   // 모서리 판정 여유
         int z = 0;
         bool nearBottom = pt.Y >= frameRect.Bottom - c;
@@ -381,8 +388,8 @@ class CaptureForm : Form
             savedLoc = Location; savedSize = new Size(capW, capH);
             Rectangle sb = Screen.FromControl(this).Bounds;
             maxed = true;
-            capW = sb.Width - 2 * B - 2 * GB;
-            capH = sb.Height - tbHeight - 2 * B - 2 * GB;
+            capW = sb.Width - 2 * (B + GAP + GB);
+            capH = sb.Height - tbHeight - 2 * (B + GAP + GB);
             Location = sb.Location;
             btnMax.Text = "\uE923";
         }

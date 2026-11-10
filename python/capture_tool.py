@@ -22,13 +22,24 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
 # ---- DPI 인식 (Tk 생성 전에 호출해야 실제 픽셀 = 이미지 픽셀) ----
-try:
-    ctypes.windll.shcore.SetProcessDpiAwareness(2)   # Per-monitor
-except Exception:
+def _set_dpi_aware():
+    try:   # Per-Monitor V2 (Win10 1703+)
+        if ctypes.windll.user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4)):
+            return
+    except Exception:
+        pass
+    try:   # Per-Monitor
+        if ctypes.windll.shcore.SetProcessDpiAwareness(2) == 0:
+            return
+    except Exception:
+        pass
     try:
         ctypes.windll.user32.SetProcessDPIAware()
     except Exception:
         pass
+
+
+_set_dpi_aware()
 
 try:
     from PIL import ImageGrab
@@ -40,6 +51,7 @@ except ImportError:
 # ---------------- 설정 ----------------
 TRANS = "#ff00fe"          # 투명 처리 색 (캡처 영역)
 BORDER = 3                 # 테두리 두께 (캡처 영역 바깥)
+GAP = 1                    # 빨간 테두리와 캡처 영역 사이 투명 여유
 GB = 8                     # 바깥 회색 띠 두께 (드래그로 크기 조절)
 FRAME_COLOR = "#808080"
 BORDER_COLOR = "#e53935"
@@ -144,7 +156,8 @@ class CaptureApp:
         self.build_toolbar()
         self.frame = tk.Frame(r, bg=FRAME_COLOR)
         self.border = tk.Frame(self.frame, bg=BORDER_COLOR)
-        self.region = tk.Frame(self.border, bg=TRANS)
+        self.hole = tk.Frame(self.border, bg=TRANS)     # 투명 여유 포함 구멍
+        self.region = tk.Frame(self.hole, bg=TRANS)     # 실제 캡처 영역
         self.rs_zone = 0
         self.frame.bind("<Motion>", self.frame_hover)
         self.frame.bind("<ButtonPress-1>", self.frame_press)
@@ -223,13 +236,15 @@ class CaptureApp:
     def layout(self):
         self.tb.update_idletasks()
         tbw, tbh = self.tb.winfo_reqwidth(), self.tb.winfo_reqheight()
-        fw = self.w + 2 * BORDER + 2 * GB
-        fh = self.h + 2 * BORDER + 2 * GB
+        fw = self.w + 2 * (BORDER + GAP + GB)
+        fh = self.h + 2 * (BORDER + GAP + GB)
         W = max(tbw, fw)
         self.tb.place(x=0, y=0, width=W, height=tbh)
         self.frame.place(x=0, y=tbh, width=fw, height=fh)
-        self.border.place(x=GB, y=GB, width=self.w + 2 * BORDER, height=self.h + 2 * BORDER)
-        self.region.place(x=BORDER, y=BORDER, width=self.w, height=self.h)
+        self.border.place(x=GB, y=GB, width=self.w + 2 * (BORDER + GAP),
+                          height=self.h + 2 * (BORDER + GAP))
+        self.hole.place(x=BORDER, y=BORDER, width=self.w + 2 * GAP, height=self.h + 2 * GAP)
+        self.region.place(x=GAP, y=GAP, width=self.w, height=self.h)
         self.root.geometry(f"{W}x{tbh + fh}+{self.x}+{self.y}")
 
     # ---------- 크기 ----------
@@ -375,7 +390,7 @@ class CaptureApp:
             sw, sh = self.root.winfo_screenwidth(), self.root.winfo_screenheight()
             self.maxed = True
             self.x, self.y = 0, 0
-            self.w, self.h = sw - 2 * BORDER - 2 * GB, sh - tbh - 2 * BORDER - 2 * GB
+            self.w, self.h = sw - 2 * (BORDER + GAP + GB), sh - tbh - 2 * (BORDER + GAP + GB)
             self.btn_max.config(text="❐")
         else:
             self.maxed = False
