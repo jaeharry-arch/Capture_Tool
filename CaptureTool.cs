@@ -3,7 +3,6 @@
 using System;
 using System.Diagnostics;
 using System.Drawing;
-using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -37,6 +36,8 @@ class CaptureForm : Form
     static readonly Color FLASH_COLOR = Color.FromArgb(67, 160, 71);
     static readonly Color TB_BG = Color.FromArgb(43, 43, 43);
     static readonly Color BTN_BG = Color.FromArgb(66, 66, 66);
+    static readonly Color FRAME_COLOR = Color.FromArgb(128, 128, 128);   // 바깥 회색 띠 (크기 조절)
+    static readonly Color FRAME_LINE = Color.FromArgb(90, 90, 90);
     static readonly string[] PRESETS = {
         "640 x 480", "800 x 600", "1024 x 768", "1280 x 720", "1280 x 1024",
         "1600 x 900", "1920 x 1080", "500 x 500", "800 x 800", "1000 x 1000" };
@@ -51,10 +52,11 @@ class CaptureForm : Form
     // ---------- 상태 ----------
     int capW = 800, capH = 600;
     string folder;
-    bool maxed, syncing, busy, gripDrag;
-    Point savedLoc, gStart;
-    Size savedSize, gSize;
-    int tbHeight, G;
+    bool maxed, syncing, busy, resizing;
+    Point savedLoc, rsStart, rsLoc;
+    int rsZone;   // 1=왼쪽, 2=오른쪽, 4=아래 (조합)
+    Size savedSize, rsSize;
+    int tbHeight, GB;   // GB = 회색 띠 두께
     float scale = 1f;
     Rectangle regionRect;
     Color borderColor = BORDER_COLOR;
@@ -62,7 +64,7 @@ class CaptureForm : Form
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "CaptureTool", "settings.ini");
 
     // ---------- 컨트롤 ----------
-    Panel tb, grip;
+    Panel tb;
     FlowLayoutPanel row1;
     Label status, btnMin, btnMax, btnClose;
     ComboBox preset;
@@ -75,7 +77,7 @@ class CaptureForm : Form
     public CaptureForm()
     {
         using (Graphics g = CreateGraphics()) scale = g.DpiX / 96f;
-        G = S(14);
+        GB = S(8);
 
         Text = "캡처 도구";
         FormBorderStyle = FormBorderStyle.None;
@@ -96,26 +98,6 @@ class CaptureForm : Form
         LoadSettings();
         BuildToolbar();
 
-        grip = new Panel();
-        grip.BackColor = TB_BG;
-        grip.Cursor = Cursors.SizeNWSE;
-        grip.Size = new Size(G, G);
-        grip.Paint += GripPaint;
-        grip.MouseDown += delegate(object s, MouseEventArgs e)
-        {
-            if (e.Button != MouseButtons.Left) return;
-            gripDrag = true; gStart = Cursor.Position; gSize = new Size(capW, capH);
-        };
-        grip.MouseMove += delegate(object s, MouseEventArgs e)
-        {
-            if (!gripDrag) return;
-            Point p = Cursor.Position;
-            capW = Clamp(gSize.Width + p.X - gStart.X);
-            capH = Clamp(gSize.Height + p.Y - gStart.Y);
-            SyncInputs(); Relayout(); ShowSize();
-        };
-        grip.MouseUp += delegate { gripDrag = false; SaveSettings(); };
-        Controls.Add(grip);
 
         flashTimer = new System.Windows.Forms.Timer();
         flashTimer.Interval = 200;
@@ -180,11 +162,11 @@ class CaptureForm : Form
         row1.Controls.Add(bOpen);
 
         // 최소화 / 최대화 / 종료  (Segoe MDL2 Assets 글리프)
-        btnMin = MkWinBtn("", BTN_BG);
+        btnMin = MkWinBtn("\uE921", BTN_BG);
         btnMin.Click += delegate { WindowState = FormWindowState.Minimized; };
-        btnMax = MkWinBtn("", BTN_BG);
+        btnMax = MkWinBtn("\uE922", BTN_BG);
         btnMax.Click += delegate { ToggleMax(); };
-        btnClose = MkWinBtn("", Color.FromArgb(232, 17, 35));
+        btnClose = MkWinBtn("\uE8BB", Color.FromArgb(232, 17, 35));
         btnClose.Click += delegate { Close(); };
 
         status = new Label();
@@ -250,15 +232,18 @@ class CaptureForm : Form
     }
 
     // ---------- 배치 / 그리기 ----------
-    void Relayout()
+    Rectangle frameRect;   // 회색 띠 바깥 경계
+
+    void Relayout() { Relayout(null); }
+
+    void Relayout(Point? loc)
     {
         Size r1 = row1.PreferredSize;
         int winW = btnMin.Width * 3;
         tbHeight = S(4) + Math.Max(r1.Height, btnMin.Height) + S(2) + status.Height + S(4);
         int tbW = S(4) + r1.Width + S(12) + winW;
-        int g = maxed ? 0 : G;
-        int bw = capW + 2 * B, bh = capH + 2 * B;
-        int tbWidth = Math.Max(tbW, bw);
+        int fw = capW + 2 * B + 2 * GB, fh = capH + 2 * B + 2 * GB;
+        int tbWidth = Math.Max(tbW, fw);
 
         tb.Bounds = new Rectangle(0, 0, tbWidth, tbHeight);
         btnClose.Location = new Point(tbWidth - btnMin.Width, 0);
@@ -267,32 +252,103 @@ class CaptureForm : Form
         status.Bounds = new Rectangle(S(6), S(4) + Math.Max(r1.Height, btnMin.Height) + S(2),
                                       tbWidth - S(12), status.Height);
 
-        regionRect = new Rectangle(B, tbHeight + B, capW, capH);
-        grip.Visible = !maxed;
-        grip.Location = new Point(bw, tbHeight + bh);
+        frameRect = new Rectangle(0, tbHeight, fw, fh);
+        regionRect = new Rectangle(GB + B, tbHeight + GB + B, capW, capH);
 
-        Size = new Size(Math.Max(tbW, bw + g), tbHeight + bh + g);
+        Bounds = new Rectangle(loc ?? Location, new Size(tbWidth, tbHeight + fh));
         Invalidate();
     }
 
     protected override void OnPaint(PaintEventArgs e)
     {
         base.OnPaint(e);
+        Graphics g = e.Graphics;
+        using (SolidBrush fr = new SolidBrush(FRAME_COLOR))
+            g.FillRectangle(fr, frameRect);
+        using (Pen ln = new Pen(FRAME_LINE))
+            g.DrawRectangle(ln, frameRect.X, frameRect.Y, frameRect.Width - 1, frameRect.Height - 1);
         using (SolidBrush br = new SolidBrush(borderColor))
-            e.Graphics.FillRectangle(br, new Rectangle(0, tbHeight, capW + 2 * B, capH + 2 * B));
+            g.FillRectangle(br, Rectangle.Inflate(regionRect, B, B));
         using (SolidBrush k = new SolidBrush(KEY))
-            e.Graphics.FillRectangle(k, regionRect);
+            g.FillRectangle(k, regionRect);
+
+        // 모서리 표시 (오른쪽 아래)
+        if (!maxed)
+            using (Pen p = new Pen(Color.FromArgb(220, 220, 220), Math.Max(1f, scale)))
+            {
+                int R = frameRect.Right - 2, Bt = frameRect.Bottom - 2;
+                for (int i = 1; i <= 2; i++)
+                    g.DrawLine(p, R - GB * i, Bt, R, Bt - GB * i);
+            }
     }
 
-    void GripPaint(object s, PaintEventArgs e)
+    // ---------- 회색 띠로 크기 조절 ----------
+    // 반환: 0=없음, -1=위쪽 띠(창 이동), 그 외 1|2|4 조합
+    int HitZone(Point pt)
     {
-        e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-        using (Pen p = new Pen(Color.FromArgb(170, 170, 170), Math.Max(1f, scale)))
-            for (int i = 1; i <= 3; i++)
-            {
-                int o = G * i / 4;
-                e.Graphics.DrawLine(p, G - 2, o, o, G - 2);
-            }
+        if (!frameRect.Contains(pt) || Rectangle.Inflate(regionRect, B, B).Contains(pt)) return 0;
+        int c = GB * 3;   // 모서리 판정 여유
+        int z = 0;
+        bool nearBottom = pt.Y >= frameRect.Bottom - c;
+        if (pt.X < GB || (nearBottom && pt.X < c)) z |= 1;
+        if (pt.X >= frameRect.Right - GB || (nearBottom && pt.X >= frameRect.Right - c)) z |= 2;
+        if (pt.Y >= frameRect.Bottom - GB || ((z & 3) != 0 && nearBottom)) z |= 4;
+        if (z == 0 && pt.Y < frameRect.Y + GB) return -1;
+        return z;
+    }
+
+    Cursor ZoneCursor(int z)
+    {
+        if (z == -1) return Cursors.SizeAll;
+        if (z == 5) return Cursors.SizeNESW;
+        if (z == 6) return Cursors.SizeNWSE;
+        if (z == 1 || z == 2) return Cursors.SizeWE;
+        if (z == 4) return Cursors.SizeNS;
+        return Cursors.Default;
+    }
+
+    protected override void OnMouseDown(MouseEventArgs e)
+    {
+        base.OnMouseDown(e);
+        if (e.Button != MouseButtons.Left || maxed) return;
+        int z = HitZone(e.Location);
+        if (z == -1) { DragDown(this, e); return; }
+        if (z == 0) return;
+        resizing = true; rsZone = z;
+        rsStart = Cursor.Position; rsSize = new Size(capW, capH); rsLoc = Location;
+    }
+
+    protected override void OnMouseMove(MouseEventArgs e)
+    {
+        base.OnMouseMove(e);
+        if (!resizing)
+        {
+            Cursor = maxed ? Cursors.Default : ZoneCursor(HitZone(e.Location));
+            return;
+        }
+        Point p = Cursor.Position;
+        int dx = p.X - rsStart.X, dy = p.Y - rsStart.Y;
+        Point loc = rsLoc;
+        if ((rsZone & 2) != 0) capW = Clamp(rsSize.Width + dx);
+        if ((rsZone & 1) != 0)
+        {
+            capW = Clamp(rsSize.Width - dx);
+            loc.X = rsLoc.X + (rsSize.Width - capW);
+        }
+        if ((rsZone & 4) != 0) capH = Clamp(rsSize.Height + dy);
+        SyncInputs(); Relayout(loc); ShowSize();
+    }
+
+    protected override void OnMouseUp(MouseEventArgs e)
+    {
+        base.OnMouseUp(e);
+        if (resizing) { resizing = false; SaveSettings(); }
+    }
+
+    protected override void OnMouseLeave(EventArgs e)
+    {
+        base.OnMouseLeave(e);
+        if (!resizing) Cursor = Cursors.Default;
     }
 
     // ---------- 크기 ----------
@@ -301,7 +357,7 @@ class CaptureForm : Form
     void SetCapSize(int w, int h)
     {
         capW = Clamp(w); capH = Clamp(h);
-        if (maxed) { maxed = false; btnMax.Text = ""; }
+        if (maxed) { maxed = false; btnMax.Text = "\uE922"; }
         SyncInputs(); Relayout(); ShowSize(); SaveSettings();
     }
 
@@ -325,17 +381,17 @@ class CaptureForm : Form
             savedLoc = Location; savedSize = new Size(capW, capH);
             Rectangle sb = Screen.FromControl(this).Bounds;
             maxed = true;
-            capW = sb.Width - 2 * B;
-            capH = sb.Height - tbHeight - 2 * B;
+            capW = sb.Width - 2 * B - 2 * GB;
+            capH = sb.Height - tbHeight - 2 * B - 2 * GB;
             Location = sb.Location;
-            btnMax.Text = "";
+            btnMax.Text = "\uE923";
         }
         else
         {
             maxed = false;
             capW = savedSize.Width; capH = savedSize.Height;
             Location = savedLoc;
-            btnMax.Text = "";
+            btnMax.Text = "\uE922";
         }
         SyncInputs(); Relayout(); ShowSize();
     }

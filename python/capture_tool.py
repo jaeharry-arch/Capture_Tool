@@ -40,7 +40,8 @@ except ImportError:
 # ---------------- 설정 ----------------
 TRANS = "#ff00fe"          # 투명 처리 색 (캡처 영역)
 BORDER = 3                 # 테두리 두께 (캡처 영역 바깥)
-GRIP = 14                  # 우하단 크기조절 핸들
+GB = 8                     # 바깥 회색 띠 두께 (드래그로 크기 조절)
+FRAME_COLOR = "#808080"
 BORDER_COLOR = "#e53935"
 FLASH_COLOR = "#43a047"
 TB_BG = "#2b2b2b"
@@ -141,13 +142,14 @@ class CaptureApp:
         r.attributes("-transparentcolor", TRANS)
 
         self.build_toolbar()
-        self.border = tk.Frame(r, bg=BORDER_COLOR)
+        self.frame = tk.Frame(r, bg=FRAME_COLOR)
+        self.border = tk.Frame(self.frame, bg=BORDER_COLOR)
         self.region = tk.Frame(self.border, bg=TRANS)
-        self.grip = tk.Label(r, text="◢", bg=TB_BG, fg="#aaaaaa",
-                             font=("Arial", 8), cursor="size_nw_se")
-        self.grip.bind("<ButtonPress-1>", self.grip_start)
-        self.grip.bind("<B1-Motion>", self.grip_move)
-        self.grip.bind("<ButtonRelease-1>", lambda e: self.save_cfg())
+        self.rs_zone = 0
+        self.frame.bind("<Motion>", self.frame_hover)
+        self.frame.bind("<ButtonPress-1>", self.frame_press)
+        self.frame.bind("<B1-Motion>", self.frame_drag)
+        self.frame.bind("<ButtonRelease-1>", self.frame_release)
 
         self.sync_inputs()
         self.layout()
@@ -221,18 +223,14 @@ class CaptureApp:
     def layout(self):
         self.tb.update_idletasks()
         tbw, tbh = self.tb.winfo_reqwidth(), self.tb.winfo_reqheight()
-        g = 0 if self.maxed else GRIP
-        bw, bh = self.w + 2 * BORDER, self.h + 2 * BORDER
-        W = max(tbw, bw + g)
-        H = tbh + bh + g
-        self.tb.place(x=0, y=0, width=max(tbw, bw), height=tbh)
-        self.border.place(x=0, y=tbh, width=bw, height=bh)
+        fw = self.w + 2 * BORDER + 2 * GB
+        fh = self.h + 2 * BORDER + 2 * GB
+        W = max(tbw, fw)
+        self.tb.place(x=0, y=0, width=W, height=tbh)
+        self.frame.place(x=0, y=tbh, width=fw, height=fh)
+        self.border.place(x=GB, y=GB, width=self.w + 2 * BORDER, height=self.h + 2 * BORDER)
         self.region.place(x=BORDER, y=BORDER, width=self.w, height=self.h)
-        if g:
-            self.grip.place(x=bw, y=tbh + bh, width=g, height=g)
-        else:
-            self.grip.place_forget()
-        self.root.geometry(f"{W}x{H}+{self.x}+{self.y}")
+        self.root.geometry(f"{W}x{tbh + fh}+{self.x}+{self.y}")
 
     # ---------- 크기 ----------
     def sync_inputs(self):
@@ -278,15 +276,65 @@ class CaptureApp:
         self.x, self.y = e.x_root - self._dx, e.y_root - self._dy
         self.root.geometry(f"+{self.x}+{self.y}")
 
-    def grip_start(self, e):
-        self._gx, self._gy, self._gw, self._gh = e.x_root, e.y_root, self.w, self.h
+    # ---------- 회색 띠로 크기 조절 ----------
+    def hit_zone(self, ex, ey):
+        """1=왼쪽, 2=오른쪽, 4=아래 (조합), -1=위쪽 띠(창 이동)"""
+        fw, fh = self.frame.winfo_width(), self.frame.winfo_height()
+        c = GB * 3
+        near_bottom = ey >= fh - c
+        z = 0
+        if ex < GB or (near_bottom and ex < c):
+            z |= 1
+        if ex >= fw - GB or (near_bottom and ex >= fw - c):
+            z |= 2
+        if ey >= fh - GB or ((z & 3) and near_bottom):
+            z |= 4
+        if z == 0 and ey < GB:
+            return -1
+        return z
 
-    def grip_move(self, e):
-        self.w = max(MIN_SIZE, self._gw + e.x_root - self._gx)
-        self.h = max(MIN_SIZE, self._gh + e.y_root - self._gy)
+    CURSORS = {-1: "fleur", 1: "sb_h_double_arrow", 2: "sb_h_double_arrow",
+               4: "sb_v_double_arrow", 5: "size_ne_sw", 6: "size_nw_se", 0: ""}
+
+    def frame_hover(self, e):
+        if not self.rs_zone:
+            z = 0 if self.maxed else self.hit_zone(e.x, e.y)
+            self.frame.config(cursor=self.CURSORS.get(z, ""))
+
+    def frame_press(self, e):
+        if self.maxed:
+            return
+        z = self.hit_zone(e.x, e.y)
+        if z == -1:
+            self.drag_start(e)
+            self.rs_zone = -1
+            return
+        self.rs_zone = z
+        self._rs = (e.x_root, e.y_root, self.w, self.h, self.x)
+
+    def frame_drag(self, e):
+        if self.rs_zone == -1:
+            self.drag_move(e)
+            return
+        if not self.rs_zone:
+            return
+        sx, sy, w0, h0, x0 = self._rs
+        dx, dy = e.x_root - sx, e.y_root - sy
+        if self.rs_zone & 2:
+            self.w = max(MIN_SIZE, w0 + dx)
+        if self.rs_zone & 1:
+            self.w = max(MIN_SIZE, w0 - dx)
+            self.x = x0 + (w0 - self.w)
+        if self.rs_zone & 4:
+            self.h = max(MIN_SIZE, h0 + dy)
         self.sync_inputs()
         self.layout()
         self.set_status(f"캡처 크기: {self.w} x {self.h} px")
+
+    def frame_release(self, e):
+        if self.rs_zone:
+            self.rs_zone = 0
+            self.save_cfg()
 
     # ---------- 창 조작 ----------
     def hwnd(self):
@@ -327,7 +375,7 @@ class CaptureApp:
             sw, sh = self.root.winfo_screenwidth(), self.root.winfo_screenheight()
             self.maxed = True
             self.x, self.y = 0, 0
-            self.w, self.h = sw - 2 * BORDER, sh - tbh - 2 * BORDER
+            self.w, self.h = sw - 2 * BORDER - 2 * GB, sh - tbh - 2 * BORDER - 2 * GB
             self.btn_max.config(text="❐")
         else:
             self.maxed = False
