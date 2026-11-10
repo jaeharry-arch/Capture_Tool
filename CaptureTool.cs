@@ -110,11 +110,10 @@ class CaptureForm : Form
         flashTimer.Interval = 200;
         flashTimer.Tick += delegate { flashTimer.Stop(); borderColor = BORDER_COLOR; Invalidate(); };
 
-        KeyDown += delegate(object s, KeyEventArgs e) { if (e.KeyCode == Keys.F9) DoCapture(); };
 
         SyncInputs();
         Relayout();
-        status.Text = "저장 폴더: " + folder;
+        status.Text = "Ctrl+C 또는 F9로 캡처  |  저장 폴더: " + folder;
     }
 
     // ---------- 툴바 ----------
@@ -403,8 +402,20 @@ class CaptureForm : Form
         SyncInputs(); Relayout(); ShowSize();
     }
 
+    // 창이 활성화된 상태에서 F9 또는 Ctrl+C → 캡처 (입력칸에 포커스가 있어도 우선 처리)
+    protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+    {
+        if (keyData == (Keys.Control | Keys.C) || keyData == Keys.F9)
+        {
+            DoCapture();
+            return true;
+        }
+        return base.ProcessCmdKey(ref msg, keyData);
+    }
+
     void DragDown(object s, MouseEventArgs e)
     {
+        Activate();   // 상단 바 클릭 시 창 활성화 → Ctrl+C 사용 가능
         if (e.Button != MouseButtons.Left || maxed) return;
         ReleaseCapture();
         SendMessage(Handle, 0xA1, (IntPtr)2, IntPtr.Zero);   // WM_NCLBUTTONDOWN, HTCAPTION

@@ -172,7 +172,10 @@ class CaptureApp:
         HotkeyThread(HOTKEY_VK, self.q).start()
         r.after(50, self.poll_queue)
         r.bind("<F9>", lambda e: self.capture())
-        self.set_status(f"저장 폴더: {self.folder}")
+        # 창이 활성화된 상태에서 Ctrl+C → 캡처 (한글 입력 상태 대비 대문자도 등록)
+        r.bind("<Control-c>", self._ctrl_c)
+        r.bind("<Control-C>", self._ctrl_c)
+        self.set_status(f"Ctrl+C 또는 F9로 캡처  |  저장 폴더: {self.folder}")
 
     # ---------- UI ----------
     def build_toolbar(self):
@@ -281,7 +284,12 @@ class CaptureApp:
         self.save_cfg()
 
     # ---------- 드래그 ----------
+    def _ctrl_c(self, _=None):
+        self.capture()
+        return "break"
+
     def drag_start(self, e):
+        self.root.focus_force()   # 상단 바 클릭 시 창 활성화 → Ctrl+C 사용 가능
         self._dx = e.x_root - self.root.winfo_x()
         self._dy = e.y_root - self.root.winfo_y()
 
