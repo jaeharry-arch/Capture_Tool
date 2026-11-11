@@ -1,6 +1,6 @@
 ﻿// CaptureTool_V1.0.cs  -  고정 크기 화면 캡처 도구 (Windows, .NET Framework 4.x 내장 컴파일러용 / C# 5)
 // 빌드: build.bat 더블클릭 → CaptureTool_V1.0.exe 생성 (Python 등 별도 설치 불필요)
-// V1.0: 단일 빨간 테두리(크기 조절 겸용), 캡처 시 노란색 표시, 영상 녹화(MJPEG AVI) 추가
+// V1.0: 단일 빨간 테두리(크기 조절 겸용), 캡처 시 노란색 표시, 영상 녹화(MJPEG AVI), 옵션(녹화 화질·fps)
 using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
@@ -43,7 +43,8 @@ class CaptureForm : Form
     const int HOTKEY_REC = 2;       // F10 녹화 시작/정지
     const uint VK_F9 = 0x78;
     const uint VK_F10 = 0x79;
-    const int REC_FPS = 15;                          // 녹화 프레임 수(초당)
+    int recFps = 15;                                 // 녹화 프레임 수(초당) — 옵션에서 변경
+    int recQuality = 80;                             // 녹화 JPEG 화질 — 옵션에서 변경
     const long REC_SPLIT_BYTES = 1000L * 1024 * 1024; // 1GB 넘으면 다음 파일로 자동 분할
     static readonly Color KEY = Color.Magenta;                  // 투명 처리 색
     static readonly Color BORDER_COLOR = Color.FromArgb(229, 57, 53);
@@ -134,7 +135,7 @@ class CaptureForm : Form
 
         SyncInputs();
         Relayout();
-        status.Text = "캡처: Ctrl+C / F9   녹화: F10  |  저장 폴더: " + folder;
+        status.Text = string.Format("캡처: Ctrl+C / F9   녹화: F10 (화질 {0} · {1}fps)  |  저장 폴더: {2}", recQuality, recFps, folder);
     }
 
     // ---------- 툴바 ----------
@@ -191,6 +192,10 @@ class CaptureForm : Form
         Button bOpen = MkButton("폴더 열기", BTN_BG, fKor);
         bOpen.Click += delegate { OpenFolder(); };
         row1.Controls.Add(bOpen);
+
+        Button bOpt = MkButton("옵션", BTN_BG, fKor);
+        bOpt.Click += delegate { ShowOptions(); };
+        row1.Controls.Add(bOpt);
 
         // 최소화 / 최대화 / 종료  (Segoe MDL2 Assets 글리프)
         btnMin = MkWinBtn("\uE921", BTN_BG);
@@ -529,6 +534,7 @@ class CaptureForm : Form
     volatile bool recording;
     volatile int recX, recY;          // 캡처 영역의 화면 좌표 (창 이동 시 갱신)
     int recW, recH;
+    volatile int curFps = 15, curQuality = 80;
     Thread recThread;
     DateTime recStart;
 
@@ -552,6 +558,7 @@ class CaptureForm : Form
         catch (Exception ex) { status.Text = "폴더 생성 실패: " + ex.Message; return; }
 
         recW = capW; recH = capH;
+        curFps = recFps; curQuality = recQuality;      // 녹화 중 옵션 변경과 무관하게 시작 시 값 사용
         UpdateRecOrigin();
         recStart = DateTime.Now;
         recording = true;
@@ -581,7 +588,7 @@ class CaptureForm : Form
         if (!recording) return;
         TimeSpan t = DateTime.Now - recStart;
         bRec.Text = string.Format("■ 정지 {0:00}:{1:00}", (int)t.TotalMinutes, t.Seconds);
-        status.Text = string.Format("● 녹화 중 {0} x {1}  ({2} fps) — F10 또는 정지 버튼으로 종료", recW, recH, REC_FPS);
+        status.Text = string.Format("● 녹화 중 {0} x {1}  ({2} fps) — F10 또는 정지 버튼으로 종료", recW, recH, curFps);
     }
 
     void RecordLoop(string dir, string baseName)
@@ -598,7 +605,7 @@ class CaptureForm : Form
             foreach (ImageCodecInfo ci in ImageCodecInfo.GetImageEncoders())
                 if (ci.MimeType == "image/jpeg") jpg = ci;
             EncoderParameters ep = new EncoderParameters(1);
-            ep.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Quality, 80L);
+            ep.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Quality, (long)curQuality);
 
             string path = Path.Combine(dir, baseName + ".avi");
             files.Add(path);
@@ -608,7 +615,7 @@ class CaptureForm : Form
             using (Graphics g = Graphics.FromImage(bmp))
             using (MemoryStream ms = new MemoryStream())
             {
-                double interval = 1000.0 / REC_FPS;
+                double interval = 1000.0 / curFps;
                 long frameNo = 0;
                 while (recording)
                 {
@@ -711,6 +718,21 @@ class CaptureForm : Form
         catch { }
     }
 
+    // ---------- 옵션 ----------
+    void ShowOptions()
+    {
+        if (recording) { status.Text = "녹화 중에는 옵션을 바꿀 수 없습니다"; return; }
+        using (OptionsForm f = new OptionsForm(recQuality, recFps, fKor, fKorB, scale))
+        {
+            if (f.ShowDialog(this) == DialogResult.OK)
+            {
+                recQuality = f.Quality; recFps = f.Fps;
+                SaveSettings();
+                status.Text = string.Format("녹화 설정: 화질 {0} · {1}fps", recQuality, recFps);
+            }
+        }
+    }
+
     // ---------- 폴더 ----------
     void ChooseFolder()
     {
@@ -785,6 +807,8 @@ class CaptureForm : Form
                     else if (k == "h" && int.TryParse(v, out n)) capH = Clamp(n);
                     else if (k == "x" && int.TryParse(v, out n)) loc.X = n;
                     else if (k == "y" && int.TryParse(v, out n)) loc.Y = n;
+                    else if (k == "quality" && int.TryParse(v, out n) && Array.IndexOf(OptionsForm.QS, n) >= 0) recQuality = n;
+                    else if (k == "fps" && int.TryParse(v, out n) && Array.IndexOf(OptionsForm.FS, n) >= 0) recFps = n;
                 }
         }
         catch { }
@@ -803,10 +827,133 @@ class CaptureForm : Form
             if (WindowState == FormWindowState.Minimized) return;
             Directory.CreateDirectory(Path.GetDirectoryName(iniPath));
             File.WriteAllText(iniPath, string.Format(
-                "folder={0}\r\nw={1}\r\nh={2}\r\nx={3}\r\ny={4}\r\n",
-                folder, sz.Width, sz.Height, loc.X, loc.Y), Encoding.UTF8);
+                "folder={0}\r\nw={1}\r\nh={2}\r\nx={3}\r\ny={4}\r\nquality={5}\r\nfps={6}\r\n",
+                folder, sz.Width, sz.Height, loc.X, loc.Y, recQuality, recFps), Encoding.UTF8);
         }
         catch { }
+    }
+}
+
+// ---------- 옵션 창 (녹화 화질 · 프레임 수 + 설명) ----------
+class OptionsForm : Form
+{
+    public static readonly int[] QS = { 60, 70, 80, 90 };
+    static readonly string[] QN = {
+        "60  낮음 — 용량 작음, 글자 경계가 뭉개짐",
+        "70  보통",
+        "80  기본 (권장) — 대부분 충분",
+        "90  높음 — 작은 글씨 선명, 용량 약 1.5~2배" };
+    public static readonly int[] FS = { 10, 15, 20, 30 };
+    static readonly string[] FN = {
+        "10 fps — 끊김 보임, 용량 작음",
+        "15 fps — 기본 (프로그램 조작 설명용)",
+        "20 fps — 조금 더 부드러움",
+        "30 fps — 부드러움 (용량·PC 부하 약 2배)" };
+    // 용도별 추천: 용도, 화질, fps
+    static readonly string[,] REC = {
+        { "프로그램 조작 설명, 보고서용", "80", "15" },
+        { "해석 결과 애니메이션, 스크롤 많음", "80", "30" },
+        { "작은 글씨가 중요한 화면", "90", "15" } };
+
+    public int Quality { get { return QS[cbQ.SelectedIndex]; } }
+    public int Fps { get { return FS[cbF.SelectedIndex]; } }
+
+    readonly ComboBox cbQ, cbF;
+    readonly float scale;
+    int S(int v) { return (int)Math.Round(v * scale); }
+
+    public OptionsForm(int quality, int fps, Font fKor, Font fKorB, float scale)
+    {
+        this.scale = scale;
+        Text = "옵션";
+        Font = fKor;
+        AutoScaleMode = AutoScaleMode.None;
+        FormBorderStyle = FormBorderStyle.FixedDialog;
+        MaximizeBox = false; MinimizeBox = false; ShowInTaskbar = false;
+        StartPosition = FormStartPosition.CenterParent;
+        TopMost = true;
+
+        int W = S(540), x = S(16), y = S(14), inner = W - 2 * x;
+
+        y = AddTitle("녹화 설정", fKorB, x, y);
+        AddText("화질 (JPEG 품질)", x, y + S(4), S(140));
+        cbQ = MkCombo(QN, Math.Max(0, Array.IndexOf(QS, quality)), x + S(150), y, inner - S(150));
+        y += cbQ.Height + S(8);
+        AddText("프레임 수 (초당 장수)", x, y + S(4), S(140));
+        cbF = MkCombo(FN, Math.Max(0, Array.IndexOf(FS, fps)), x + S(150), y, inner - S(150));
+        y += cbF.Height + S(16);
+
+        y = AddTitle("설명", fKorB, x, y);
+        y = AddWrapped("• 화질: 한 장 한 장이 얼마나 선명한지입니다. 높일수록 글자·선 경계가 또렷하고, " +
+                       "낮추면 경계 주변이 뭉개지거나 얼룩이 생깁니다. 엑셀 숫자·해석 결과 그림·코드처럼 " +
+                       "글자가 많은 화면에서 차이가 잘 보입니다. 80이면 보통 충분하고, 90 이상은 차이가 작은데 " +
+                       "용량이 1.5~2배로 늘어납니다.", x, y, inner);
+        y = AddWrapped("• 프레임 수: 1초에 몇 장을 찍는지입니다. 높일수록 마우스 이동·스크롤·애니메이션이 " +
+                       "부드럽고, 낮추면 뚝뚝 끊겨 보입니다. 15fps는 조작 설명용으로 충분하고, 30fps는 용량과 " +
+                       "PC 부하가 약 2배입니다.", x, y + S(4), inner);
+        y += S(12);
+
+        y = AddTitle("용도별 추천 (행을 클릭하면 적용)", fKorB, x, y);
+        ListView lv = new ListView();
+        lv.View = View.Details; lv.FullRowSelect = true; lv.GridLines = true;
+        lv.HeaderStyle = ColumnHeaderStyle.Nonclickable; lv.MultiSelect = false; lv.HideSelection = false;
+        lv.Columns.Add("용도", inner - S(150) - S(4));
+        lv.Columns.Add("화질", S(70), HorizontalAlignment.Center);
+        lv.Columns.Add("fps", S(80), HorizontalAlignment.Center);
+        for (int i = 0; i < REC.GetLength(0); i++)
+            lv.Items.Add(new ListViewItem(new string[] { REC[i, 0], REC[i, 1], REC[i, 2] }));
+        lv.Bounds = new Rectangle(x, y, inner, S(24) * 4 + S(6));
+        lv.ItemSelectionChanged += delegate(object s, ListViewItemSelectionChangedEventArgs e)
+        {
+            if (!e.IsSelected) return;
+            int r = e.ItemIndex;
+            cbQ.SelectedIndex = Array.IndexOf(QS, int.Parse(REC[r, 1]));
+            cbF.SelectedIndex = Array.IndexOf(FS, int.Parse(REC[r, 2]));
+        };
+        Controls.Add(lv);
+        y = lv.Bottom + S(8);
+        y = AddWrapped("※ 영상 크기는 빨간 테두리 안의 캡처 크기(W×H)와 같습니다. 설정은 다음 녹화부터 적용됩니다.",
+                       x, y, inner);
+        y += S(12);
+
+        Button ok = new Button(); ok.Text = "확인"; ok.DialogResult = DialogResult.OK;
+        Button cancel = new Button(); cancel.Text = "취소"; cancel.DialogResult = DialogResult.Cancel;
+        ok.Size = cancel.Size = new Size(S(84), S(30));
+        cancel.Location = new Point(W - x - cancel.Width, y);
+        ok.Location = new Point(cancel.Left - S(8) - ok.Width, y);
+        Controls.Add(ok); Controls.Add(cancel);
+        AcceptButton = ok; CancelButton = cancel;
+
+        ClientSize = new Size(W, ok.Bottom + S(14));
+    }
+
+    int AddTitle(string t, Font f, int x, int y)
+    {
+        Label l = new Label(); l.Text = t; l.Font = f; l.AutoSize = true; l.Location = new Point(x, y);
+        Controls.Add(l);
+        return y + l.PreferredHeight + S(6);
+    }
+
+    void AddText(string t, int x, int y, int w)
+    {
+        Label l = new Label(); l.Text = t; l.AutoSize = false; l.Bounds = new Rectangle(x, y, w, S(20));
+        Controls.Add(l);
+    }
+
+    int AddWrapped(string t, int x, int y, int w)
+    {
+        Label l = new Label(); l.Text = t; l.AutoSize = true; l.MaximumSize = new Size(w, 0);
+        l.Location = new Point(x, y);
+        Controls.Add(l);
+        return y + l.PreferredSize.Height;
+    }
+
+    ComboBox MkCombo(string[] items, int sel, int x, int y, int w)
+    {
+        ComboBox c = new ComboBox(); c.DropDownStyle = ComboBoxStyle.DropDownList;
+        c.Items.AddRange(items); c.SelectedIndex = sel; c.Bounds = new Rectangle(x, y, w, c.Height);
+        Controls.Add(c);
+        return c;
     }
 }
 

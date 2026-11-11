@@ -57,7 +57,18 @@ GAP = 1                    # 빨간 테두리와 캡처 영역 사이 투명 여
 BORDER_COLOR = "#e53935"
 FLASH_COLOR = "#ffd600"    # 캡처 순간 노란색
 REC_BTN = "#6a1b9a"
-REC_FPS = 15
+REC_FPS = 15                       # 기본값 (옵션에서 변경)
+QUALITIES = [(60, "60  낮음 — 용량 작음, 글자 경계가 뭉개짐"),
+             (70, "70  보통"),
+             (80, "80  기본 (권장) — 대부분 충분"),
+             (90, "90  높음 — 작은 글씨 선명, 용량 약 1.5~2배")]
+FPS_LIST = [(10, "10 fps — 끊김 보임, 용량 작음"),
+            (15, "15 fps — 기본 (프로그램 조작 설명용)"),
+            (20, "20 fps — 조금 더 부드러움"),
+            (30, "30 fps — 부드러움 (용량·PC 부하 약 2배)")]
+RECOMMEND = [("프로그램 조작 설명, 보고서용", 80, 15),
+             ("해석 결과 애니메이션, 스크롤 많음", 80, 30),
+             ("작은 글씨가 중요한 화면", 90, 15)]
 REC_SPLIT_BYTES = 1000 * 1024 * 1024   # 1GB 넘으면 다음 파일로 자동 분할
 TB_BG = "#2b2b2b"
 TB_FG = "#eeeeee"
@@ -242,6 +253,9 @@ class CaptureApp:
         self.y = int(self.cfg.get("y", 100))
         self.folder = self.cfg.get(
             "folder", os.path.join(os.path.expanduser("~"), "Pictures", "Captures"))
+        q, f = self.cfg.get("quality", 80), self.cfg.get("fps", REC_FPS)
+        self.rec_quality = q if q in [v for v, _ in QUALITIES] else 80
+        self.rec_fps = f if f in [v for v, _ in FPS_LIST] else REC_FPS
         self.maxed = False
         self.saved_geom = None
         self.busy = False
@@ -279,7 +293,8 @@ class CaptureApp:
         # 창이 활성화된 상태에서 Ctrl+C → 캡처 (한글 입력 상태 대비 대문자도 등록)
         r.bind("<Control-c>", self._ctrl_c)
         r.bind("<Control-C>", self._ctrl_c)
-        self.set_status(f"캡처: Ctrl+C / F9   녹화: F10  |  저장 폴더: {self.folder}")
+        self.set_status(f"캡처: Ctrl+C / F9   녹화: F10 (화질 {self.rec_quality} · {self.rec_fps}fps)"
+                        f"  |  저장 폴더: {self.folder}")
 
     # ---------- UI ----------
     def build_toolbar(self):
@@ -317,6 +332,7 @@ class CaptureApp:
         self.rec_btn.pack(side="left", padx=(4, 0))
         self.mk_btn(row1, "📁 폴더", self.choose_folder).pack(side="left", padx=(4, 0))
         self.mk_btn(row1, "열기", self.open_folder).pack(side="left", padx=(4, 0))
+        self.mk_btn(row1, "옵션", self.show_options).pack(side="left", padx=(4, 0))
 
         # 창 조작 버튼 (최소화 / 최대화 / 종료)
         self.btn_close = self.mk_win_btn(row1, "✕", self.quit, hover="#e81123")
@@ -577,6 +593,83 @@ class CaptureApp:
         self.frame.config(bg=FLASH_COLOR)
         self.root.after(200, lambda: self.frame.config(bg=BORDER_COLOR))
 
+    # ---------- 옵션 (녹화 화질 · 프레임 수 + 설명) ----------
+    def show_options(self):
+        if self.recording:
+            self.set_status("녹화 중에는 옵션을 바꿀 수 없습니다")
+            return
+        win = tk.Toplevel(self.root)
+        win.title("옵션")
+        win.attributes("-topmost", True)
+        win.resizable(False, False)
+        win.transient(self.root)
+        pad = dict(padx=14, sticky="w")
+        W = 520
+
+        tk.Label(win, text="녹화 설정", font=FONT_B).grid(row=0, column=0, columnspan=2, pady=(12, 4), **pad)
+        tk.Label(win, text="화질 (JPEG 품질)", font=FONT).grid(row=1, column=0, pady=3, **pad)
+        cq = ttk.Combobox(win, values=[t for _, t in QUALITIES], state="readonly", width=44, font=FONT)
+        cq.current([v for v, _ in QUALITIES].index(self.rec_quality))
+        cq.grid(row=1, column=1, padx=(0, 14), pady=3, sticky="w")
+        tk.Label(win, text="프레임 수 (초당 장수)", font=FONT).grid(row=2, column=0, pady=3, **pad)
+        cf = ttk.Combobox(win, values=[t for _, t in FPS_LIST], state="readonly", width=44, font=FONT)
+        cf.current([v for v, _ in FPS_LIST].index(self.rec_fps))
+        cf.grid(row=2, column=1, padx=(0, 14), pady=3, sticky="w")
+
+        tk.Label(win, text="설명", font=FONT_B).grid(row=3, column=0, columnspan=2, pady=(12, 2), **pad)
+        tk.Label(win, font=FONT, justify="left", wraplength=W, text=(
+            "• 화질: 한 장 한 장이 얼마나 선명한지입니다. 높일수록 글자·선 경계가 또렷하고, 낮추면 경계 "
+            "주변이 뭉개지거나 얼룩이 생깁니다. 엑셀 숫자·해석 결과 그림·코드처럼 글자가 많은 화면에서 "
+            "차이가 잘 보입니다. 80이면 보통 충분하고, 90 이상은 차이가 작은데 용량이 1.5~2배로 늘어납니다.\n"
+            "• 프레임 수: 1초에 몇 장을 찍는지입니다. 높일수록 마우스 이동·스크롤·애니메이션이 부드럽고, "
+            "낮추면 뚝뚝 끊겨 보입니다. 15fps는 조작 설명용으로 충분하고, 30fps는 용량과 PC 부하가 약 2배입니다."
+        )).grid(row=4, column=0, columnspan=2, **pad)
+
+        tk.Label(win, text="용도별 추천 (행을 클릭하면 적용)", font=FONT_B).grid(
+            row=5, column=0, columnspan=2, pady=(12, 2), **pad)
+        tv = ttk.Treeview(win, columns=("use", "q", "fps"), show="headings", height=len(RECOMMEND),
+                          selectmode="browse")
+        for col, title, width, anchor in (("use", "용도", 330, "w"), ("q", "화질", 80, "center"),
+                                          ("fps", "fps", 80, "center")):
+            tv.heading(col, text=title)
+            tv.column(col, width=width, anchor=anchor)
+        for use, q, f in RECOMMEND:
+            tv.insert("", "end", values=(use, q, f))
+        tv.grid(row=6, column=0, columnspan=2, padx=14, sticky="we")
+
+        def on_pick(_=None):
+            sel = tv.selection()
+            if not sel:
+                return
+            _, q, f = RECOMMEND[tv.index(sel[0])]
+            cq.current([v for v, _ in QUALITIES].index(q))
+            cf.current([v for v, _ in FPS_LIST].index(f))
+        tv.bind("<<TreeviewSelect>>", on_pick)
+
+        tk.Label(win, font=FONT, fg="#555555", justify="left", wraplength=W,
+                 text="※ 영상 크기는 빨간 테두리 안의 캡처 크기(W×H)와 같습니다. 설정은 다음 녹화부터 적용됩니다."
+                 ).grid(row=7, column=0, columnspan=2, pady=(6, 0), **pad)
+
+        def ok():
+            self.rec_quality = QUALITIES[cq.current()][0]
+            self.rec_fps = FPS_LIST[cf.current()][0]
+            self.save_cfg()
+            self.set_status(f"녹화 설정: 화질 {self.rec_quality} · {self.rec_fps}fps")
+            win.destroy()
+
+        bf = tk.Frame(win)
+        bf.grid(row=8, column=0, columnspan=2, sticky="e", padx=14, pady=12)
+        tk.Button(bf, text="확인", width=9, command=ok).pack(side="left", padx=(0, 6))
+        tk.Button(bf, text="취소", width=9, command=win.destroy).pack(side="left")
+        win.bind("<Return>", lambda e: ok())
+        win.bind("<Escape>", lambda e: win.destroy())
+        win.update_idletasks()
+        x = self.root.winfo_x() + 40
+        y = self.root.winfo_y() + 40
+        win.geometry(f"+{x}+{y}")
+        win.grab_set()
+        win.focus_force()
+
     # ---------- 영상 녹화 ----------
     def toggle_record(self):
         if self.recording:
@@ -596,6 +689,7 @@ class CaptureApp:
         self.root.update_idletasks()
         self.rec_origin = (self.region.winfo_rootx(), self.region.winfo_rooty())
         self.rec_size = (self.w, self.h)
+        self.cur_fps, self.cur_quality = self.rec_fps, self.rec_quality   # 시작 시 값 고정
         self.rec_start = time.time()
         self.recording = True
         self.preset.config(state="disabled")
@@ -611,7 +705,7 @@ class CaptureApp:
         t = int(time.time() - self.rec_start)
         self.rec_btn.config(text=f"■ 정지 {t // 60:02d}:{t % 60:02d}", bg="#c62828")
         w, h = self.rec_size
-        self.set_status(f"● 녹화 중 {w} x {h}  ({REC_FPS} fps) — F10 또는 정지 버튼으로 종료")
+        self.set_status(f"● 녹화 중 {w} x {h}  ({self.cur_fps} fps) — F10 또는 정지 버튼으로 종료")
         self.root.after(500, self.update_rec_ui)
 
     def record_loop(self, folder, base):
@@ -624,7 +718,7 @@ class CaptureApp:
             path = os.path.join(folder, base + ".avi")
             files.append(path)
             avi = AviMjpegWriter(path, w, h)
-            interval = 1.0 / REC_FPS
+            interval = 1.0 / self.cur_fps
             n = 0
             last = None
             while self.recording:
@@ -637,7 +731,7 @@ class CaptureApp:
                     if img is None:
                         raise
                 buf = io.BytesIO()
-                img.save(buf, "JPEG", quality=80)
+                img.save(buf, "JPEG", quality=self.cur_quality)
                 avi.write_frame(buf.getvalue())
                 total += 1
                 part_frames += 1
@@ -714,7 +808,8 @@ class CaptureApp:
             x, y, w, h = self.x, self.y, self.w, self.h
         try:
             with open(CONFIG_PATH, "w", encoding="utf-8") as f:
-                json.dump({"w": w, "h": h, "x": x, "y": y, "folder": self.folder},
+                json.dump({"w": w, "h": h, "x": x, "y": y, "folder": self.folder,
+                           "quality": self.rec_quality, "fps": self.rec_fps},
                           f, ensure_ascii=False, indent=2)
         except Exception:
             pass

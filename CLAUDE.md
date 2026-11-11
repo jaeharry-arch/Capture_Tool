@@ -20,6 +20,7 @@ V1.0/              ← 최신
 ## 버전 규칙
 - 버전은 **폴더명 + 파일명 + build.bat의 VER + 창 제목**에 모두 같은 값(`V0.x`)으로 표기
 - 이전 버전 폴더는 **수정하지 않음** (보관용). 작업은 항상 새 버전 폴더에서
+  - 단, 허재님이 "버전 유지하고 파일 교체"를 고르면 해당 버전 폴더를 직접 수정 (V1.0 옵션 추가가 이 경우)
 - 최신 버전 = 번호가 가장 큰 `V*` 폴더
 - 새 버전 번호는 매번 허재님께 먼저 확인
 - Drive 백업: `Capture` 폴더(https://drive.google.com/drive/folders/1wbSAg4U_jNnQ6wLxJexbzTQf3GN5IRg6)
@@ -48,15 +49,18 @@ V1.0/              ← 최신
 - 캡처: `CopyFromScreen(PointToScreen(regionRect))` → PNG 저장 + `CopyToClipboard` (Win32 CF_DIB + "PNG")
 - 단축키: F9 캡처 / F10 녹화 = `RegisterHotKey` 전역 (id 1, 2) / Ctrl+C = `ProcessCmdKey` → `BeginInvoke(DoCapture)`
 - 녹화: 백그라운드 스레드 `RecordLoop` → `CopyFromScreen` + `DrawCursor` → JPEG(q80) → `AviMjpegWriter`
-  - AVI 1.0 + idx1 직접 기록, 종료 시 실제 fps(프레임수/경과시간)로 헤더 보정, `REC_FPS = 15`
+  - AVI 1.0 + idx1 직접 기록, 종료 시 실제 fps(프레임수/경과시간)로 헤더 보정
+  - 화질/fps는 `recQuality`/`recFps`(옵션), 녹화 시작 시 `curQuality`/`curFps`로 고정
+- 옵션 창: `OptionsForm` (화질 `QS` 60/70/80/90, fps `FS` 10/15/20/30, 설명 + 용도별 추천 ListView 클릭 적용)
   - 녹화 영역 좌표 `recX/recY`(volatile)는 `LocationChanged`/`Relayout`에서 갱신
   - 정지 후 `Clipboard.SetFileDropList`로 파일 복사, 1GB 초과 시 `_partN.avi` 분할
   - 파일 형식 검증: Python 동일 구조 writer로 생성한 AVI를 ffprobe/ffmpeg로 디코드 확인 (mjpeg, 프레임수·길이 정상)
-- 설정: `%APPDATA%\CaptureTool\settings.ini` (folder, w, h, x, y)
+- 설정: `%APPDATA%\CaptureTool\settings.ini` (folder, w, h, x, y, quality, fps)
 - UI 폰트: 한글 맑은 고딕, 숫자 Arial, 창 버튼 Segoe MDL2 Assets
 
 ## 미해결 / 확인 대기
 - Claude 작업 환경이 Linux라 **Windows 실기 빌드·동작은 미검증** — 허재님 확인 결과에 따라 수정
 - V0.1에서 확인 대기: Ctrl+C 클립보드 복사, 빨간 테두리 혼입 수정 효과
-- V1.0에서 확인 대기: csc 빌드 성공 여부, 녹화 AVI의 Windows 기본 플레이어 재생, 녹화 중 CPU 부하(1080p)
+- V1.0에서 확인 대기: csc 빌드 성공 여부, 녹화 AVI의 Windows 기본 플레이어 재생, 녹화 중 CPU 부하(1080p, 30fps), 옵션 창 레이아웃(고배율 DPI)
+- 검토 중인 후속 아이디어: OpenDML(AVI 2.0)로 1GB 분할 없이 단일 파일 저장
 - Python 버전 녹화는 마우스 커서 미포함
