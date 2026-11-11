@@ -1,12 +1,12 @@
 # Capture Tool
 
-고정 크기 화면 캡처 도구 (Windows) — Python 등 별도 설치 없이 동작
+고정 크기 화면 캡처 + 영상 녹화 도구 (Windows) — Python 등 별도 설치 없이 동작
 
-**최신 버전: [V0.1](V0.1/)** — 설치 방법은 [V0.1/README.md](V0.1/README.md)
+**최신 버전: [V1.0](V1.0/)** — 설치 방법은 [V1.0/README.md](V1.0/README.md)
 
 ## 빠른 설치
-1. 최신 버전 폴더(`V0.1`)를 PC에 복사
-2. `build.bat` 더블클릭 → `CaptureTool_V0.1.exe` 생성 후 실행
+1. 최신 버전 폴더(`V1.0`)를 PC에 복사
+2. `build.bat` 더블클릭 → `CaptureTool_V1.0.exe` 생성 후 실행
 
 ## 구성
 - `V0.x/` — 버전별 독립 설치 세트 (이전 버전은 보관용, 수정하지 않음)

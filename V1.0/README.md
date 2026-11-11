@@ -1,0 +1,30 @@
+# Capture Tool V1.0 — 설치 세트
+
+이 폴더 하나만 있으면 설치됩니다. (Python 등 별도 프로그램 불필요)
+
+## 설치
+1. 이 폴더(`V1.0`)를 PC의 원하는 위치에 복사
+2. `build.bat` 더블클릭
+   → Windows 내장 .NET Framework 4.x 컴파일러로 `CaptureTool_V1.0.exe` 생성 후 자동 실행
+3. 이후에는 `CaptureTool_V1.0.exe` 하나만 원하는 곳에 두고 사용
+
+## 파일
+| 파일 | 용도 |
+|---|---|
+| `CaptureTool_V1.0.cs` | 프로그램 소스 (C# WinForms) |
+| `build.bat` | exe 빌드 스크립트 (`VER=V1.0`) |
+| `python/capture_tool_V1.0.py` | (선택) 동일 기능 Python 버전 — `pip install pillow` 후 실행 |
+
+## 사용법
+- **크기 지정**: 프리셋 선택 / W·H 숫자 입력(Enter) / 빨간 테두리 드래그 (좌·우·아래 변 및 모서리)
+- **이동**: 상단 바 또는 빨간 테두리 위쪽 드래그
+- **캡처**: 캡처 버튼 / **F9** (어디서든) / 상단 바 클릭 후 **Ctrl+C**
+  - 지정 폴더에 `Capture_날짜_시간_WxH.png` 저장 + 클립보드 복사 → Ctrl+V
+  - 캡처 순간 테두리가 **노란색**으로 깜빡임
+- **영상 녹화**: 녹화 버튼 / **F10** (어디서든) — 다시 누르면 정지
+  - 빨간 테두리 안쪽만 녹화 (15fps, 마우스 커서 포함, 소리 없음)
+  - 지정 폴더에 `Record_날짜_시간_WxH.avi` 저장 (MJPEG AVI — 영화 및 TV/미디어 플레이어/VLC/PPT 재생)
+  - 정지하면 **파일이 클립보드에 복사** → 탐색기·메신저·메일에 Ctrl+V로 파일 붙여넣기
+  - 녹화 중에는 크기 변경 불가 (창 이동은 가능 — 녹화 영역도 따라감)
+  - 1GB 넘으면 `_part2.avi` … 로 자동 분할
+- **설정 기억**: 크기·위치·폴더 → `%APPDATA%\CaptureTool\settings.ini`
