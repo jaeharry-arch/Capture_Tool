@@ -1,2 +1,4 @@
 *.exe
 *.pdb
+__pycache__/
+*.pyc
