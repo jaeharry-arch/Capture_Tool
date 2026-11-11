@@ -1,4 +1,4 @@
-﻿// CaptureTool.cs  -  고정 크기 화면 캡처 도구 (Windows, .NET Framework 4.x 내장 컴파일러용 / C# 5)
+﻿// CaptureTool_V0.1.cs  -  고정 크기 화면 캡처 도구 (Windows, .NET Framework 4.x 내장 컴파일러용 / C# 5)
 // 빌드: build.bat 더블클릭 → CaptureTool.exe 생성 (Python 등 별도 설치 불필요)
 using System;
 using System.Diagnostics;
@@ -95,7 +95,7 @@ class CaptureForm : Form
         using (Graphics g = CreateGraphics()) scale = g.DpiX / 96f;
         GB = S(8);
 
-        Text = "캡처 도구";
+        Text = "캡처 도구 V0.1";
         FormBorderStyle = FormBorderStyle.None;
         StartPosition = FormStartPosition.Manual;
         AutoScaleMode = AutoScaleMode.None;

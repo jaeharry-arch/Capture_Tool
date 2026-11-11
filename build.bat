@@ -1,6 +1,7 @@
 @echo off
 setlocal
 cd /d "%~dp0"
+set "VER=V0.1"
 set "CSC=%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
 if not exist "%CSC%" set "CSC=%WINDIR%\Microsoft.NET\Framework\v4.0.30319\csc.exe"
 if not exist "%CSC%" (
@@ -8,7 +9,7 @@ if not exist "%CSC%" (
   pause
   exit /b 1
 )
-"%CSC%" /nologo /codepage:65001 /target:winexe /optimize+ /out:CaptureTool.exe /r:System.Windows.Forms.dll /r:System.Drawing.dll CaptureTool.cs
+"%CSC%" /nologo /codepage:65001 /target:winexe /optimize+ /out:CaptureTool_%VER%.exe /r:System.Windows.Forms.dll /r:System.Drawing.dll CaptureTool_%VER%.cs
 if errorlevel 1 (
   echo.
   echo [ERROR] Build failed.
@@ -16,5 +17,5 @@ if errorlevel 1 (
   exit /b 1
 )
 echo.
-echo [OK] CaptureTool.exe created.
-start "" "CaptureTool.exe"
+echo [OK] CaptureTool_%VER%.exe created.
+start "" "CaptureTool_%VER%.exe"

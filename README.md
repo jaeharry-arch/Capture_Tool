@@ -1,10 +1,10 @@
-# Capture Tool
+# Capture Tool (V0.1)
 
 고정 크기 화면 캡처 도구 (Windows) — Python 등 별도 설치 없이 동작
 
 ## 빌드 / 실행
-1. `build.bat` 더블클릭 → Windows 내장 .NET Framework 4.x 컴파일러로 `CaptureTool.exe` 생성 후 자동 실행
-2. 이후에는 `CaptureTool.exe` 하나만 복사해서 사용
+1. `build.bat` 더블클릭 → Windows 내장 .NET Framework 4.x 컴파일러로 `CaptureTool_V0.1.exe` 생성 후 자동 실행
+2. 이후에는 `CaptureTool_V0.1.exe` 하나만 복사해서 사용
 
 ## 기능
 - **크기 지정**: 프리셋 선택 / W·H 숫자 입력(Enter) / 바깥 회색 띠 드래그 (좌·우·아래 변 및 모서리)
@@ -16,8 +16,12 @@
 - DPI 배율(125%, 150% 등)과 무관하게 실제 픽셀 기준으로 캡처
 
 ## Python 버전 (참고용)
-`python/capture_tool.py` — 동일 기능의 tkinter 버전 (Python + Pillow 필요)
+`python/capture_tool_V0.1.py` — 동일 기능의 tkinter 버전 (Python + Pillow 필요)
 ```
 pip install pillow
-python python/capture_tool.py
+python python/capture_tool_V0.1.py
 ```
+
+## 버전 관리
+- 버전은 파일명에 표기 (`CaptureTool_V0.1.cs`, `capture_tool_V0.1.py`)
+- 새 버전 시 파일명과 `build.bat`의 `VER` 값을 함께 변경

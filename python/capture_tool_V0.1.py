@@ -7,7 +7,7 @@
  - 전역 단축키 F9 로 캡처 (다른 창에서 작업 중이어도 동작)
 
 필요 패키지:  pip install pillow
-exe 만들기:   pyinstaller --noconsole --onefile capture_tool.py
+exe 만들기:   pyinstaller --noconsole --onefile capture_tool_V0.1.py
 """
 import ctypes
 import ctypes.wintypes as wt
@@ -147,7 +147,7 @@ class CaptureApp:
         self.busy = False
 
         r = self.root = tk.Tk()
-        r.title("캡처 도구")
+        r.title("캡처 도구 V0.1")
         r.overrideredirect(True)
         r.attributes("-topmost", True)
         r.config(bg=TRANS)
