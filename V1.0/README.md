@@ -14,6 +14,7 @@
 | `CaptureTool_V1.0.cs` | 프로그램 소스 (C# WinForms) |
 | `build.bat` | exe 빌드 스크립트 (`VER=V1.0`) |
 | `python/capture_tool_V1.0.py` | (선택) 동일 기능 Python 버전 — `pip install pillow` 후 실행 |
+| `CaptureTool_V1.0_설명서.pptx` | 기능 설명 및 활용 설명서 (PPT, 설치에는 불필요) |
 
 ## 사용법
 - **크기 지정**: 프리셋 선택 / W·H 숫자 입력(Enter) / 빨간 테두리 드래그 (좌·우·아래 변 및 모서리)

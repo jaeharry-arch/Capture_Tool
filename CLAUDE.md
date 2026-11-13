@@ -15,6 +15,7 @@ V1.0/              ← 최신
   build.bat        (VER=V1.0 → CaptureTool_V1.0.exe)
   README.md        (설치·사용 방법)
   python/capture_tool_V1.0.py   (선택, 동일 기능 Python 버전)
+  CaptureTool_V1.0_설명서.pptx  (기능 설명·활용 설명서, 한화 주황 양식 — 기능 변경 시 함께 갱신)
 ```
 
 ## 버전 규칙
